@@ -1,5 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QListWidget
+from PyQt5.QtCore import Qt
 
 class BettingTracker(QWidget):
     def __init__(self):
@@ -13,8 +14,9 @@ class BettingTracker(QWidget):
         self.bet_amount_label = QLabel("Введіть суму ставки:", self)
         self.bet_amount_input = QLineEdit(self)
 
-        self.win_amount_label = QLabel("Введіть суму виграшу (0 якщо програш):", self)
-        self.win_amount_input = QLineEdit(self)
+        self.win_coefficient_label = QLabel("Введіть коефіцієнт (0 якщо програш):", self)
+        self.win_coefficient_input = QLineEdit(self)
+        self.win_coefficient_input.returnPressed.connect(self.add_bet)  # Додаємо обробник для Enter
 
         self.add_button = QPushButton('Додати ставку', self)
         self.add_button.clicked.connect(self.add_bet)
@@ -31,8 +33,8 @@ class BettingTracker(QWidget):
 
         self.layout.addWidget(self.bet_amount_label)
         self.layout.addWidget(self.bet_amount_input)
-        self.layout.addWidget(self.win_amount_label)
-        self.layout.addWidget(self.win_amount_input)
+        self.layout.addWidget(self.win_coefficient_label)
+        self.layout.addWidget(self.win_coefficient_input)
         self.layout.addWidget(self.add_button)
         self.layout.addWidget(self.finish_button)
         self.layout.addWidget(self.bets_list)
@@ -47,24 +49,27 @@ class BettingTracker(QWidget):
 
     def add_bet(self):
         bet_amount = float(self.bet_amount_input.text())
-        win_amount = float(self.win_amount_input.text())
+        win_coefficient = float(self.win_coefficient_input.text())
 
         self.total_bets += bet_amount
-        if win_amount == 0:
+        if win_coefficient == 0:
             self.total_losses += bet_amount
             entry_result = 'Програш'
+            win_amount = 0
+            display_text = f"Ставка: {bet_amount}, Коефіцієнт: {win_coefficient}, Результат: {entry_result}"
         else:
+            win_amount = bet_amount * win_coefficient
             self.total_wins += win_amount
             entry_result = 'Виграш'
+            display_text = f"Ставка: {bet_amount}, Коефіцієнт: {win_coefficient}, Виграш: {win_amount}, Результат: {entry_result}"
 
-        entry = f"{bet_amount},{win_amount},{entry_result}"
-        self.bets_list.addItem(f"Ставка: {bet_amount}, Результат: {entry_result}, Сума: {win_amount}")
+        self.bets_list.addItem(display_text)
 
         self.bet_amount_input.clear()
-        self.win_amount_input.clear()
+        self.win_coefficient_input.clear()
 
         # Запис даних до файлу
-        self.save_bet(entry)
+        self.save_bet(f"{bet_amount},{win_coefficient},{win_amount},{entry_result}")
 
     def finish_betting(self):
         total_info = (
@@ -76,22 +81,24 @@ class BettingTracker(QWidget):
         self.total_label.setText(total_info)
 
     def save_bet(self, entry):
-        with open('b.txt', 'a') as file:
+        with open('bet.txt', 'a') as file:
             file.write(entry + "\n")
 
     def load_bets(self):
         try:
-            with open('b.txt', 'r') as file:
+            with open('bet.txt', 'r') as file:
                 for line in file:
-                    bet_amount, win_amount, entry_result = line.strip().split(',')
-                    self.bets_list.addItem(f"Ставка: {bet_amount}, Результат: {entry_result}, Сума: {win_amount}")
-                    bet_amount = float(bet_amount)
-                    win_amount = float(win_amount)
-                    self.total_bets += bet_amount
-                    if win_amount == 0:
-                        self.total_losses += bet_amount
-                    else:
-                        self.total_wins += win_amount
+                    parts = line.strip().split(',')
+                    if len(parts) == 4:
+                        bet_amount, win_coefficient, win_amount, entry_result = parts
+                        self.bets_list.addItem(f"Ставка: {bet_amount}, Коефіцієнт: {win_coefficient}, Виграш: {win_amount}, Результат: {entry_result}")
+                        bet_amount = float(bet_amount)
+                        win_amount = float(win_amount)
+                        self.total_bets += bet_amount
+                        if win_coefficient == '0':
+                            self.total_losses += bet_amount
+                        else:
+                            self.total_wins += win_amount
         except FileNotFoundError:
             pass  # Якщо файл не знайдено, починаємо з чистого аркуша
 
