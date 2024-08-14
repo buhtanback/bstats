@@ -26,6 +26,7 @@ class BettingTracker(QWidget):
 
         self.team_inputs = []
         self.bet_on_team_inputs = []  # Поля для команд, на які зроблена ставка
+        self.event_inputs = []  # Поля для подій
         self.win_checkboxes = []
         self.lose_checkboxes = []
         for i in range(5):
@@ -38,6 +39,11 @@ class BettingTracker(QWidget):
             bet_on_team_input.setPlaceholderText(f"Team you bet on for Match {i + 1}")
             self.bet_on_team_inputs.append(bet_on_team_input)
             self.layout.addWidget(bet_on_team_input)
+
+            event_input = QLineEdit(self)
+            event_input.setPlaceholderText(f"Event for Match {i + 1} (e.g., Total Goals, Handicap)")
+            self.event_inputs.append(event_input)
+            self.layout.addWidget(event_input)
 
             checkbox_layout = QHBoxLayout()
 
@@ -79,8 +85,7 @@ class BettingTracker(QWidget):
 
         self.total_label = QLabel("Waiting for input...", self)
 
-        self.withdraw_button = QPushButton('Withdraw Funds', self)
-        self.withdraw_button.clicked.connect(self.withdraw_funds)
+        self.withdraw_button = QPushButton('Withdraw Funds', self)  # Видалено зайвий рядок
         self.withdraw_input = QDoubleSpinBox(self)
         self.withdraw_input.setRange(0, self.get_current_balance())
         self.withdraw_input.setDecimals(2)
@@ -105,8 +110,6 @@ class BettingTracker(QWidget):
         self.layout.addLayout(withdraw_layout)
 
         self.setLayout(self.layout)
-
-
 
     def update_coefficient_display(self):
         value = self.win_coefficient_slider.value() / 100.0
@@ -146,14 +149,27 @@ class BettingTracker(QWidget):
         win_amount = 0.0
         is_loss = False
 
-        for win_checkbox, lose_checkbox in zip(self.win_checkboxes, self.lose_checkboxes):
+        result_text = ""
+        for team_input, bet_on_team_input, event_input, win_checkbox, lose_checkbox in zip(
+                self.team_inputs, self.bet_on_team_inputs, self.event_inputs, self.win_checkboxes,
+                self.lose_checkboxes):
+
+            bet_on_team = bet_on_team_input.text().strip()
+            event_text = event_input.text().strip()
+
             if lose_checkbox.isChecked():
                 is_loss = True
-                break  # Якщо хоча б один матч програний, вийти з циклу
-
-            if win_checkbox.isChecked():
+                if bet_on_team:
+                    result_text += f"Lost on: {bet_on_team}\n"
+                if event_text:
+                    result_text += f"Lost on event: {event_text}\n"
+            elif win_checkbox.isChecked():
                 win_amount += bet_amount * win_coefficient
                 self.total_wins += bet_amount * win_coefficient
+                if bet_on_team:
+                    result_text += f"Won on: {bet_on_team}\n"
+                if event_text:
+                    result_text += f"Won on event: {event_text}\n"
 
         if is_loss or win_amount == 0.0:
             self.total_losses += bet_amount
@@ -161,18 +177,18 @@ class BettingTracker(QWidget):
         else:
             entry_result = 'Win'
 
+        bet_details = f"Bet: {bet_amount:.2f} UAH, Coefficient: {win_coefficient:.2f}"
+
         # Додавання до QTreeWidget
         parent_item = QTreeWidgetItem(self.bets_tree)
-        parent_item.setText(0, f"Bet: {bet_amount:.2f} UAH, Coefficient: {win_coefficient:.2f}")
+        parent_item.setText(0, bet_details)
         parent_item.setText(1, f"Win: {win_amount:.2f} UAH")
-        parent_item.setText(2, f"Result: {entry_result}")
+        parent_item.setText(2, f"{entry_result}\n{result_text.strip()}")  # Додаємо деталі в колонку Result
 
-        # Об'єднуємо матчі в один рядок з розділенням через \n
-        matches_str = '\n'.join(matches)
-
-        # Додаємо як один елемент з розривами рядків
-        match_item = QTreeWidgetItem(parent_item)
-        match_item.setText(0, matches_str)  # Використовуємо \n для розривів рядків
+        # Додаємо матчі як піделементи
+        for match in matches:
+            match_item = QTreeWidgetItem(parent_item)
+            match_item.setText(0, match)
 
         parent_item.setExpanded(True)  # Розгорнути запис для зручного перегляду
 
@@ -184,6 +200,10 @@ class BettingTracker(QWidget):
         # Очищення полів після додавання ставки
         for input_field in self.team_inputs:
             input_field.clear()
+        for bet_on_team_input in self.bet_on_team_inputs:
+            bet_on_team_input.clear()
+        for event_input in self.event_inputs:
+            event_input.clear()
         for win_checkbox, lose_checkbox in zip(self.win_checkboxes, self.lose_checkboxes):
             win_checkbox.setChecked(False)
             lose_checkbox.setChecked(False)
@@ -198,32 +218,35 @@ class BettingTracker(QWidget):
     def check_bet_outcome(self):
         all_wins = True
         any_losses = False
-        for team_input, bet_on_team_input, win_checkbox, lose_checkbox in zip(self.team_inputs, self.bet_on_team_inputs,
-                                                                              self.win_checkboxes,
-                                                                              self.lose_checkboxes):
+        for team_input, bet_on_team_input, event_input, win_checkbox, lose_checkbox in zip(self.team_inputs,
+                                                                                           self.bet_on_team_inputs,
+                                                                                           self.event_inputs,
+                                                                                           self.win_checkboxes,
+                                                                                           self.lose_checkboxes):
             team_text = team_input.text().strip()
             bet_on_team = bet_on_team_input.text().strip()
+            event_text = event_input.text().strip()
 
-            if not bet_on_team:
-                continue  # Якщо команда, на яку зроблена ставка, не введена, пропустити
+            if not bet_on_team and not event_text:
+                continue  # Якщо подія або команда, на яку зроблена ставка, не введені, пропустити
 
-            # Перевірка результату матчу
-            if bet_on_team in team_text:
+            # Перевірка результату матчу або події
+            if bet_on_team in team_text or event_text:
                 if win_checkbox.isChecked():
-                    continue  # Якщо команда виграла, все добре
+                    continue  # Якщо команда виграла або подія здійснилася, все добре
                 elif lose_checkbox.isChecked():
                     all_wins = False
                     any_losses = True
             else:
-                self.total_label.setText("Please ensure the team names match the ones in the match.")
+                self.total_label.setText("Please ensure the team names or event details match the ones in the match.")
                 return
 
         if any_losses:
-            self.total_label.setText("Bet Unsuccessful. At least one match lost.")
+            self.total_label.setText("Bet Unsuccessful. At least one match/event lost.")
         elif all_wins:
-            self.total_label.setText("Bet Successful! All matches won.")
+            self.total_label.setText("Bet Successful! All matches/events won.")
         else:
-            self.total_label.setText("Bet Outcome Inconclusive. Not all matches won.")
+            self.total_label.setText("Bet Outcome Inconclusive. Not all matches/events won.")
 
     def update_balance_labels(self):
         current_balance = self.get_current_balance()
