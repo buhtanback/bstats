@@ -88,6 +88,9 @@ class BettingTracker(QWidget):
         self.add_button = QPushButton('Add Bet', self)
         self.add_button.clicked.connect(self.add_bet)
 
+        self.delete_button = QPushButton('Delete Selected Bet', self)  # Кнопка для видалення
+        self.delete_button.clicked.connect(self.delete_selected_bet)
+
         self.check_bet_button = QPushButton('Check Bet Outcome', self)
         self.check_bet_button.clicked.connect(self.check_bet_outcome)
 
@@ -102,6 +105,7 @@ class BettingTracker(QWidget):
         form_layout.addWidget(self.win_coefficient_slider)
         form_layout.addWidget(self.coefficient_display_label)
         form_layout.addWidget(self.add_button)
+        form_layout.addWidget(self.delete_button)  # Додаємо кнопку видалення
         form_layout.addWidget(self.check_bet_button)
         form_layout.addWidget(self.finish_button)
 
@@ -206,19 +210,16 @@ class BettingTracker(QWidget):
             entry_result = 'Win'
 
         bet_details = f"Bet: {bet_amount:.2f} UAH, Coefficient: {win_coefficient:.2f}"
-        match_details = ', '.join(matches)
 
-        # Додавання всіх деталей до однієї строки в QTreeWidgetItem
+        # Додавання до QTreeWidget без піделементів, вся інформація в одному рядку
         item = QTreeWidgetItem(self.bets_tree)
-        item.setText(0, match_details)
+        item.setText(0, f"{', '.join(matches)}")
         item.setText(1, f"Win: {win_amount:.2f} UAH")
-        item.setText(2, entry_result)
-        item.setText(3, result_text.strip())
+        item.setText(2, f"{entry_result}")
+        item.setText(3, result_text.strip())  # Додаємо деталі в колонку Details
 
-        # Збереження у файл з розривами рядків
-        matches_file_str = '\n'.join(matches)
-        self.save_bet_to_file(matches_file_str, bet_amount, win_coefficient, win_amount, entry_result)
-        self.update_balance_labels()
+        # Оновлення файлу після додавання
+        self.save_all_bets()
 
         # Очищення полів після додавання ставки
         for input_field in self.team_inputs:
@@ -234,9 +235,24 @@ class BettingTracker(QWidget):
         self.win_coefficient_slider.setValue(100)
         self.coefficient_display_label.setText("1.00")
 
-    def save_bet_to_file(self, matches_str, bet_amount, win_coefficient, win_amount, entry_result):
-        with open('bet.txt', 'a') as file:
-            file.write(f"{matches_str},{bet_amount:.2f},{win_coefficient:.2f},{win_amount:.2f},{entry_result}\n")
+    def delete_selected_bet(self):
+        selected_item = self.bets_tree.currentItem()
+        if selected_item:
+            index = self.bets_tree.indexOfTopLevelItem(selected_item)
+            if index >= 0:
+                self.bets_tree.takeTopLevelItem(index)
+                # Оновлюємо файл після видалення
+                self.save_all_bets()
+
+    def save_all_bets(self):
+        with open('bet.txt', 'w') as file:
+            for i in range(self.bets_tree.topLevelItemCount()):
+                item = self.bets_tree.topLevelItem(i)
+                matches_str = item.text(0)
+                bet_amount = item.text(1).replace('Win: ', '').replace(' UAH', '')
+                entry_result = item.text(2)
+                result_text = item.text(3)
+                file.write(f"{matches_str},{bet_amount},{entry_result},{result_text}\n")
 
     def check_bet_outcome(self):
         all_wins = True
@@ -304,29 +320,28 @@ class BettingTracker(QWidget):
             with open('bet.txt', 'r') as file:
                 for line in file:
                     parts = line.strip().split(',')
-                    if len(parts) >= 5:
-                        match = ','.join(parts[:-4])  # Об'єднуємо все, що йде до останніх 4-х значень
-                        bet_amount_str = parts[-4]
-                        win_coefficient_str = parts[-3]
-                        win_amount_str = parts[-2]
-                        entry_result = parts[-1]
+                    if len(parts) >= 4:
+                        match = parts[0]
+                        bet_amount_str = parts[1]
+                        entry_result = parts[2]
+                        result_text = parts[3]
+
                         try:
                             bet_amount = float(bet_amount_str)
-                            win_coefficient = float(win_coefficient_str)
-                            win_amount = float(win_amount_str)
                         except ValueError:
                             continue  # Пропустити рядки з некоректними даними
 
                         item = QTreeWidgetItem(self.bets_tree)
                         item.setText(0, match)
-                        item.setText(1, f"Win: {win_amount_str} UAH")
-                        item.setText(2, entry_result)
+                        item.setText(1, f"Win: {bet_amount:.2f} UAH")
+                        item.setText(2, f"{entry_result}")
+                        item.setText(3, f"{result_text}")
 
                         self.total_bets += bet_amount
                         if entry_result.strip().lower() == 'loss':
                             self.total_losses += bet_amount
                         elif entry_result.strip().lower() == 'win':
-                            self.total_wins += win_amount
+                            self.total_wins += bet_amount
                 self.update_balance_labels()
         except FileNotFoundError:
             pass  # Якщо файл не знайдено, починаємо з чистого листа
