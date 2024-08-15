@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel,
-    QTreeWidget, QTreeWidgetItem, QLineEdit, QHBoxLayout, QSlider, QDoubleSpinBox, QCheckBox
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QTreeWidget, QTreeWidgetItem, QLineEdit, QSlider, QDoubleSpinBox, QCheckBox
 )
 from PyQt5.QtCore import Qt
 
@@ -19,7 +19,22 @@ class BettingTracker(QWidget):
 
     def initUI(self):
         self.setWindowTitle("Betting Tracker")
-        self.layout = QVBoxLayout()
+
+        # Встановлюємо розмір вікна
+        self.resize(1200, 900)  # Ширина, висота
+
+        # Отримуємо номер екрана, на якому знаходиться курсор миші
+        screen_number = QApplication.desktop().screenNumber(QApplication.desktop().cursor().pos())
+        screen = QApplication.desktop().screenGeometry(screen_number)
+
+        # Центруємо вікно на обраному екрані
+        self.move(screen.center() - self.rect().center())
+
+        # Створюємо головний горизонтальний лейаут
+        main_layout = QHBoxLayout()
+
+        # Лівий вертикальний лейаут для форми введення
+        form_layout = QVBoxLayout()
 
         self.deposit_label = QLabel(f"Initial deposit: {self.total_deposited:.2f} UAH")
         self.balance_label = QLabel(f"Current balance: {self.get_current_balance():.2f} UAH")
@@ -33,17 +48,17 @@ class BettingTracker(QWidget):
             team_input = QLineEdit(self)
             team_input.setPlaceholderText(f"Team {i + 1}A vs Team {i + 1}B")
             self.team_inputs.append(team_input)
-            self.layout.addWidget(team_input)
+            form_layout.addWidget(team_input)
 
             bet_on_team_input = QLineEdit(self)
             bet_on_team_input.setPlaceholderText(f"Team you bet on for Match {i + 1}")
             self.bet_on_team_inputs.append(bet_on_team_input)
-            self.layout.addWidget(bet_on_team_input)
+            form_layout.addWidget(bet_on_team_input)
 
             event_input = QLineEdit(self)
-            event_input.setPlaceholderText(f"Event for Match {i + 1} (e.g., Total Goals, Handicap)")
+            event_input.setPlaceholderText(f"Event for Match {i + 1} (e.g., bo+1.5, bo3)")
             self.event_inputs.append(event_input)
-            self.layout.addWidget(event_input)
+            form_layout.addWidget(event_input)
 
             checkbox_layout = QHBoxLayout()
 
@@ -55,7 +70,7 @@ class BettingTracker(QWidget):
             self.lose_checkboxes.append(lose_checkbox)
             checkbox_layout.addWidget(lose_checkbox)
 
-            self.layout.addLayout(checkbox_layout)
+            form_layout.addLayout(checkbox_layout)
 
         self.bet_amount_label = QLabel("Enter bet amount:", self)
         self.bet_amount_input = QLineEdit(self)
@@ -79,37 +94,50 @@ class BettingTracker(QWidget):
         self.finish_button = QPushButton('Calculate Results', self)
         self.finish_button.clicked.connect(self.finish_betting)
 
-        self.bets_tree = QTreeWidget(self)
-        self.bets_tree.setColumnCount(3)
-        self.bets_tree.setHeaderLabels(["Match", "Bet", "Result"])
+        form_layout.addWidget(self.deposit_label)
+        form_layout.addWidget(self.balance_label)
+        form_layout.addWidget(self.bet_amount_label)
+        form_layout.addWidget(self.bet_amount_input)
+        form_layout.addWidget(self.win_coefficient_label)
+        form_layout.addWidget(self.win_coefficient_slider)
+        form_layout.addWidget(self.coefficient_display_label)
+        form_layout.addWidget(self.add_button)
+        form_layout.addWidget(self.check_bet_button)
+        form_layout.addWidget(self.finish_button)
 
-        self.total_label = QLabel("Waiting for input...", self)
-
-        self.withdraw_button = QPushButton('Withdraw Funds', self)  # Видалено зайвий рядок
+        withdraw_layout = QHBoxLayout()
+        self.withdraw_button = QPushButton('Withdraw Funds', self)
         self.withdraw_input = QDoubleSpinBox(self)
         self.withdraw_input.setRange(0, self.get_current_balance())
         self.withdraw_input.setDecimals(2)
         self.withdraw_input.setSingleStep(10.0)
-
-        self.layout.addWidget(self.deposit_label)
-        self.layout.addWidget(self.balance_label)
-        self.layout.addWidget(self.bet_amount_label)
-        self.layout.addWidget(self.bet_amount_input)
-        self.layout.addWidget(self.win_coefficient_label)
-        self.layout.addWidget(self.win_coefficient_slider)
-        self.layout.addWidget(self.coefficient_display_label)
-        self.layout.addWidget(self.add_button)
-        self.layout.addWidget(self.check_bet_button)
-        self.layout.addWidget(self.finish_button)
-        self.layout.addWidget(self.bets_tree)  # Заміна QListWidget на QTreeWidget
-        self.layout.addWidget(self.total_label)
-
-        withdraw_layout = QHBoxLayout()
         withdraw_layout.addWidget(self.withdraw_input)
         withdraw_layout.addWidget(self.withdraw_button)
-        self.layout.addLayout(withdraw_layout)
+        form_layout.addLayout(withdraw_layout)
 
-        self.setLayout(self.layout)
+        # Правий вертикальний лейаут для таблиці результатів
+        result_layout = QVBoxLayout()
+
+        self.bets_tree = QTreeWidget(self)
+        self.bets_tree.setColumnCount(4)
+        self.bets_tree.setHeaderLabels(["Match", "Bet", "Result", "Details"])
+
+        # Встановлюємо ширину колонок
+        self.bets_tree.setColumnWidth(0, 200)
+        self.bets_tree.setColumnWidth(1, 150)
+        self.bets_tree.setColumnWidth(2, 100)
+        self.bets_tree.setColumnWidth(3, 250)
+
+        result_layout.addWidget(self.bets_tree)
+
+        self.total_label = QLabel("Waiting for input...", self)
+        result_layout.addWidget(self.total_label)
+
+        # Додаємо обидва вертикальні лейаути до головного горизонтального лейаута
+        main_layout.addLayout(form_layout, 2)  # Лівий блок займає 2 частини
+        main_layout.addLayout(result_layout, 3)  # Правий блок займає 3 частини
+
+        self.setLayout(main_layout)
 
     def update_coefficient_display(self):
         value = self.win_coefficient_slider.value() / 100.0
@@ -178,19 +206,14 @@ class BettingTracker(QWidget):
             entry_result = 'Win'
 
         bet_details = f"Bet: {bet_amount:.2f} UAH, Coefficient: {win_coefficient:.2f}"
+        match_details = ', '.join(matches)
 
-        # Додавання до QTreeWidget
-        parent_item = QTreeWidgetItem(self.bets_tree)
-        parent_item.setText(0, bet_details)
-        parent_item.setText(1, f"Win: {win_amount:.2f} UAH")
-        parent_item.setText(2, f"{entry_result}\n{result_text.strip()}")  # Додаємо деталі в колонку Result
-
-        # Додаємо матчі як піделементи
-        for match in matches:
-            match_item = QTreeWidgetItem(parent_item)
-            match_item.setText(0, match)
-
-        parent_item.setExpanded(True)  # Розгорнути запис для зручного перегляду
+        # Додавання всіх деталей до однієї строки в QTreeWidgetItem
+        item = QTreeWidgetItem(self.bets_tree)
+        item.setText(0, match_details)
+        item.setText(1, f"Win: {win_amount:.2f} UAH")
+        item.setText(2, entry_result)
+        item.setText(3, result_text.strip())
 
         # Збереження у файл з розривами рядків
         matches_file_str = '\n'.join(matches)
@@ -294,16 +317,10 @@ class BettingTracker(QWidget):
                         except ValueError:
                             continue  # Пропустити рядки з некоректними даними
 
-                        parent_item = QTreeWidgetItem(self.bets_tree)
-                        parent_item.setText(0, f"Bet: {bet_amount:.2f} UAH, Coefficient: {win_coefficient:.2f}")
-                        parent_item.setText(1, f"Win: {win_amount:.2f} UAH")
-                        parent_item.setText(2, f"Result: {entry_result}")
-
-                        for match_line in match.split('\n'):
-                            match_item = QTreeWidgetItem(parent_item)
-                            match_item.setText(0, match_line)
-
-                        parent_item.setExpanded(True)  # Розгорнути запис для зручного перегляду
+                        item = QTreeWidgetItem(self.bets_tree)
+                        item.setText(0, match)
+                        item.setText(1, f"Win: {win_amount_str} UAH")
+                        item.setText(2, entry_result)
 
                         self.total_bets += bet_amount
                         if entry_result.strip().lower() == 'loss':
