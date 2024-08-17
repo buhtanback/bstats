@@ -5,15 +5,15 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
-
 class BettingTracker(QWidget):
     def __init__(self):
         super().__init__()
-        self.total_deposited = 500.0  # Початковий депозит
+        self.total_deposited = 0.0  # Початковий депозит
         self.total_withdrawn = 0.0
         self.total_bets = 0.0
         self.total_wins = 0.0
         self.total_losses = 0.0
+        self.load_balance()  # Завантажуємо збережений баланс
         self.initUI()
         self.load_bets()
 
@@ -36,8 +36,22 @@ class BettingTracker(QWidget):
         # Лівий вертикальний лейаут для форми введення
         form_layout = QVBoxLayout()
 
-        self.deposit_label = QLabel(f"Initial deposit: {self.total_deposited:.2f} UAH")
+        self.deposit_label = QLabel(f"Current balance: {self.get_current_balance():.2f} UAH")
         self.balance_label = QLabel(f"Current balance: {self.get_current_balance():.2f} UAH")
+
+        # Поле для введення суми депозиту та кнопка
+        self.deposit_input = QDoubleSpinBox(self)
+        self.deposit_input.setRange(0, 100000)
+        self.deposit_input.setDecimals(2)
+        self.deposit_input.setSingleStep(100.0)
+        self.deposit_button = QPushButton('Deposit Funds', self)
+        self.deposit_button.clicked.connect(self.deposit_funds)
+
+        form_layout.addWidget(self.deposit_label)
+        deposit_layout = QHBoxLayout()
+        deposit_layout.addWidget(self.deposit_input)
+        deposit_layout.addWidget(self.deposit_button)
+        form_layout.addLayout(deposit_layout)
 
         self.team_inputs = []
         self.bet_on_team_inputs = []  # Поля для команд, на які зроблена ставка
@@ -97,7 +111,6 @@ class BettingTracker(QWidget):
         self.finish_button = QPushButton('Calculate Results', self)
         self.finish_button.clicked.connect(self.finish_betting)
 
-        form_layout.addWidget(self.deposit_label)
         form_layout.addWidget(self.balance_label)
         form_layout.addWidget(self.bet_amount_label)
         form_layout.addWidget(self.bet_amount_input)
@@ -150,6 +163,13 @@ class BettingTracker(QWidget):
     def get_current_balance(self):
         return self.total_deposited + self.total_wins - self.total_losses - self.total_withdrawn
 
+    def deposit_funds(self):
+        deposit_amount = self.deposit_input.value()
+        self.total_deposited += deposit_amount
+        self.update_balance_labels()
+        self.deposit_input.setValue(0)
+        self.save_balance()  # Зберігаємо баланс після депозиту
+
     def add_bet(self):
         matches = [input.text() for input in self.team_inputs if input.text().strip()]
         if not matches:
@@ -175,11 +195,11 @@ class BettingTracker(QWidget):
             self.total_label.setText(f"Insufficient balance. Available: {current_balance:.2f} UAH")
             return
 
-        win_coefficient = self.win_coefficient_slider.value() / 100.0 + 0.99  # Від 1.00 до 10.00
+        win_coefficient = self.win_coefficient_slider.value() / 100.0  # Від 1.00 до 10.00
 
         self.total_bets += bet_amount
-        win_amount = 0.0
         is_loss = False
+        total_win_amount = bet_amount * win_coefficient
 
         result_text = ""
         for team_input, bet_on_team_input, event_input, win_checkbox, lose_checkbox in zip(
@@ -196,17 +216,17 @@ class BettingTracker(QWidget):
                 if event_text:
                     result_text += f"Lost on event: {event_text}\n"
             elif win_checkbox.isChecked():
-                win_amount += bet_amount * win_coefficient
-                self.total_wins += bet_amount * win_coefficient
                 if bet_on_team:
                     result_text += f"Won on: {bet_on_team}\n"
                 if event_text:
                     result_text += f"Won on event: {event_text}\n"
 
-        if is_loss or win_amount == 0.0:
+        if is_loss:
             self.total_losses += bet_amount
             entry_result = 'Loss'
+            total_win_amount = 0.0
         else:
+            self.total_wins += total_win_amount
             entry_result = 'Win'
 
         bet_details = f"Bet: {bet_amount:.2f} UAH, Coefficient: {win_coefficient:.2f}"
@@ -214,7 +234,7 @@ class BettingTracker(QWidget):
         # Додавання до QTreeWidget без піделементів, вся інформація в одному рядку
         item = QTreeWidgetItem(self.bets_tree)
         item.setText(0, f"{', '.join(matches)}")
-        item.setText(1, f"Win: {win_amount:.2f} UAH")
+        item.setText(1, f"Win: {total_win_amount:.2f} UAH")
         item.setText(2, f"{entry_result}")
         item.setText(3, result_text.strip())  # Додаємо деталі в колонку Details
 
@@ -300,6 +320,7 @@ class BettingTracker(QWidget):
             self.update_balance_labels()
             self.total_label.setText(f"Withdrew {amount:.2f} UAH.")
             self.withdraw_input.setValue(0.0)
+            self.save_balance()  # Зберігаємо баланс після виводу коштів
         else:
             self.total_label.setText("Insufficient balance to withdraw.")
 
@@ -346,6 +367,21 @@ class BettingTracker(QWidget):
         except FileNotFoundError:
             pass  # Якщо файл не знайдено, починаємо з чистого листа
 
+    def save_balance(self):
+        with open('balance.txt', 'w') as file:
+            file.write(f"{self.total_deposited},{self.total_withdrawn},{self.total_wins},{self.total_losses}")
+
+    def load_balance(self):
+        try:
+            with open('balance.txt', 'r') as file:
+                balance_data = file.readline().strip().split(',')
+                if len(balance_data) == 4:
+                    self.total_deposited = float(balance_data[0])
+                    self.total_withdrawn = float(balance_data[1])
+                    self.total_wins = float(balance_data[2])
+                    self.total_losses = float(balance_data[3])
+        except FileNotFoundError:
+            pass  # Якщо файл не знайдено, починаємо з чистого листа
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
