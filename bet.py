@@ -124,6 +124,7 @@ class BettingTracker(QWidget):
 
         withdraw_layout = QHBoxLayout()
         self.withdraw_button = QPushButton('Withdraw Funds', self)
+        self.withdraw_button.clicked.connect(self.withdraw_funds)  # Додаємо обробник події
         self.withdraw_input = QDoubleSpinBox(self)
         self.withdraw_input.setRange(0, self.get_current_balance())
         self.withdraw_input.setDecimals(2)
@@ -317,10 +318,11 @@ class BettingTracker(QWidget):
         current_balance = self.get_current_balance()
         if amount <= current_balance:
             self.total_withdrawn += amount
-            self.update_balance_labels()
+            self.total_deposited -= amount  # Оновлюємо загальний баланс після виведення коштів
+            self.update_balance_labels()  # Оновлюємо відображення балансу на екрані
             self.total_label.setText(f"Withdrew {amount:.2f} UAH.")
             self.withdraw_input.setValue(0.0)
-            self.save_balance()  # Зберігаємо баланс після виводу коштів
+            self.save_balance()  # Зберігаємо баланс після виведення коштів
         else:
             self.total_label.setText("Insufficient balance to withdraw.")
 
