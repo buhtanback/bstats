@@ -16,7 +16,7 @@ class BettingTracker(QWidget):
         self.load_balance()  # Завантажуємо збережений баланс
         self.initUI()
         self.load_bets()
-        self.load_transactions()
+        self.load_transaction_history()
 
     def initUI(self):
         self.setWindowTitle("Betting Tracker")
@@ -149,11 +149,15 @@ class BettingTracker(QWidget):
 
         result_layout.addWidget(self.bets_tree)
 
-        self.transaction_history = QTreeWidget(self)
-        self.transaction_history.setColumnCount(3)
-        self.transaction_history.setHeaderLabels(["Transaction Type", "Amount", "Balance After"])
+        # Історія транзакцій (депозити/виводи)
+        self.transactions_tree = QTreeWidget(self)
+        self.transactions_tree.setColumnCount(2)
+        self.transactions_tree.setHeaderLabels(["Type", "Amount"])
+        result_layout.addWidget(self.transactions_tree)
 
-        result_layout.addWidget(self.transaction_history)
+        self.delete_transaction_button = QPushButton('Delete Selected Transaction', self)
+        self.delete_transaction_button.clicked.connect(self.delete_selected_transaction)
+        result_layout.addWidget(self.delete_transaction_button)
 
         self.total_label = QLabel("Waiting for input...", self)
         result_layout.addWidget(self.total_label)
@@ -175,8 +179,8 @@ class BettingTracker(QWidget):
         deposit_amount = self.deposit_input.value()
         self.total_deposited += deposit_amount
         self.update_balance_labels()
-        self.add_transaction("Deposit", deposit_amount)
         self.deposit_input.setValue(0)
+        self.add_transaction("Deposit", deposit_amount)
         self.save_balance()  # Зберігаємо баланс після депозиту
 
     def add_bet(self):
@@ -328,18 +332,26 @@ class BettingTracker(QWidget):
             self.total_withdrawn += amount
             self.update_balance_labels()  # Оновлюємо відображення балансу на екрані
             self.total_label.setText(f"Withdrew {amount:.2f} UAH.")
-            self.add_transaction("Withdraw", -amount)
             self.withdraw_input.setValue(0.0)
+            self.add_transaction("Withdraw", -amount)
             self.save_balance()  # Зберігаємо баланс після виведення коштів
         else:
             self.total_label.setText("Insufficient balance to withdraw.")
 
     def add_transaction(self, transaction_type, amount):
-        current_balance = self.get_current_balance()
-        item = QTreeWidgetItem(self.transaction_history)
+        item = QTreeWidgetItem(self.transactions_tree)
         item.setText(0, transaction_type)
         item.setText(1, f"{amount:.2f} UAH")
-        item.setText(2, f"{current_balance:.2f} UAH")
+        self.save_transaction_history()
+
+    def delete_selected_transaction(self):
+        selected_item = self.transactions_tree.currentItem()
+        if selected_item:
+            index = self.transactions_tree.indexOfTopLevelItem(selected_item)
+            if index >= 0:
+                self.transactions_tree.takeTopLevelItem(index)
+                # Оновлюємо файл після видалення
+                self.save_transaction_history()
 
     def finish_betting(self):
         net_profit = self.total_wins - self.total_losses
@@ -400,29 +412,30 @@ class BettingTracker(QWidget):
         except FileNotFoundError:
             pass  # Якщо файл не знайдено, починаємо з чистого листа
 
-    def save_transactions(self):
+    def save_transaction_history(self):
         with open('transactions.txt', 'w') as file:
-            for i in range(self.transaction_history.topLevelItemCount()):
-                item = self.transaction_history.topLevelItem(i)
+            for i in range(self.transactions_tree.topLevelItemCount()):
+                item = self.transactions_tree.topLevelItem(i)
                 transaction_type = item.text(0)
                 amount = item.text(1).replace(' UAH', '')
-                balance = item.text(2).replace(' UAH', '')
-                file.write(f"{transaction_type},{amount},{balance}\n")
+                file.write(f"{transaction_type},{amount}\n")
 
-    def load_transactions(self):
+    def load_transaction_history(self):
         try:
             with open('transactions.txt', 'r') as file:
                 for line in file:
                     parts = line.strip().split(',')
-                    if len(parts) == 3:
+                    if len(parts) == 2:
                         transaction_type = parts[0]
-                        amount = parts[1]
-                        balance = parts[2]
+                        amount_str = parts[1]
+                        try:
+                            amount = float(amount_str)
+                        except ValueError:
+                            continue  # Пропустити рядки з некоректними даними
 
-                        item = QTreeWidgetItem(self.transaction_history)
+                        item = QTreeWidgetItem(self.transactions_tree)
                         item.setText(0, transaction_type)
-                        item.setText(1, f"{amount} UAH")
-                        item.setText(2, f"{balance} UAH")
+                        item.setText(1, f"{amount:.2f} UAH")
         except FileNotFoundError:
             pass  # Якщо файл не знайдено, починаємо з чистого листа
 
