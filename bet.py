@@ -16,6 +16,7 @@ class BettingTracker(QWidget):
         self.load_balance()  # Завантажуємо збережений баланс
         self.initUI()
         self.load_bets()
+        self.load_transactions()
 
     def initUI(self):
         self.setWindowTitle("Betting Tracker")
@@ -148,6 +149,12 @@ class BettingTracker(QWidget):
 
         result_layout.addWidget(self.bets_tree)
 
+        self.transaction_history = QTreeWidget(self)
+        self.transaction_history.setColumnCount(3)
+        self.transaction_history.setHeaderLabels(["Transaction Type", "Amount", "Balance After"])
+
+        result_layout.addWidget(self.transaction_history)
+
         self.total_label = QLabel("Waiting for input...", self)
         result_layout.addWidget(self.total_label)
 
@@ -168,6 +175,7 @@ class BettingTracker(QWidget):
         deposit_amount = self.deposit_input.value()
         self.total_deposited += deposit_amount
         self.update_balance_labels()
+        self.add_transaction("Deposit", deposit_amount)
         self.deposit_input.setValue(0)
         self.save_balance()  # Зберігаємо баланс після депозиту
 
@@ -318,13 +326,20 @@ class BettingTracker(QWidget):
         current_balance = self.get_current_balance()
         if amount <= current_balance:
             self.total_withdrawn += amount
-            self.total_deposited -= amount  # Оновлюємо загальний баланс після виведення коштів
             self.update_balance_labels()  # Оновлюємо відображення балансу на екрані
             self.total_label.setText(f"Withdrew {amount:.2f} UAH.")
+            self.add_transaction("Withdraw", -amount)
             self.withdraw_input.setValue(0.0)
             self.save_balance()  # Зберігаємо баланс після виведення коштів
         else:
             self.total_label.setText("Insufficient balance to withdraw.")
+
+    def add_transaction(self, transaction_type, amount):
+        current_balance = self.get_current_balance()
+        item = QTreeWidgetItem(self.transaction_history)
+        item.setText(0, transaction_type)
+        item.setText(1, f"{amount:.2f} UAH")
+        item.setText(2, f"{current_balance:.2f} UAH")
 
     def finish_betting(self):
         net_profit = self.total_wins - self.total_losses
@@ -382,6 +397,32 @@ class BettingTracker(QWidget):
                     self.total_withdrawn = float(balance_data[1])
                     self.total_wins = float(balance_data[2])
                     self.total_losses = float(balance_data[3])
+        except FileNotFoundError:
+            pass  # Якщо файл не знайдено, починаємо з чистого листа
+
+    def save_transactions(self):
+        with open('transactions.txt', 'w') as file:
+            for i in range(self.transaction_history.topLevelItemCount()):
+                item = self.transaction_history.topLevelItem(i)
+                transaction_type = item.text(0)
+                amount = item.text(1).replace(' UAH', '')
+                balance = item.text(2).replace(' UAH', '')
+                file.write(f"{transaction_type},{amount},{balance}\n")
+
+    def load_transactions(self):
+        try:
+            with open('transactions.txt', 'r') as file:
+                for line in file:
+                    parts = line.strip().split(',')
+                    if len(parts) == 3:
+                        transaction_type = parts[0]
+                        amount = parts[1]
+                        balance = parts[2]
+
+                        item = QTreeWidgetItem(self.transaction_history)
+                        item.setText(0, transaction_type)
+                        item.setText(1, f"{amount} UAH")
+                        item.setText(2, f"{balance} UAH")
         except FileNotFoundError:
             pass  # Якщо файл не знайдено, починаємо з чистого листа
 
